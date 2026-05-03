@@ -38,6 +38,8 @@ router.post('/send-predue-reminders', async (req, res) => {
 
       const message = `Reminder: Invoice ${inv.invoice_number} for Unit ${inv.units.unit_number} (Rs ${inv.total_amount}) is due on ${targetDateStr}. Please pay to avoid penalties.`;
 
+      // Notifications disabled as per request
+      /*
       // Enqueue Email
       if (user.email) {
         await enqueueNotification('email', {
@@ -54,6 +56,7 @@ router.post('/send-predue-reminders', async (req, res) => {
           message: message
         });
       }
+      */
     }
 
     res.json({ processed: invoices.length });
@@ -83,6 +86,8 @@ router.post('/send-overdue-reminders', async (req, res) => {
 
       const message = `URGENT: Invoice ${inv.invoice_number} for Unit ${inv.units.unit_number} is Overdue. Total amount including penalty: Rs ${inv.total_amount}. Please pay immediately.`;
 
+      // Notifications disabled as per request
+      /*
       // Enqueue Email
       if (user.email) {
         await enqueueNotification('email', {
@@ -99,6 +104,7 @@ router.post('/send-overdue-reminders', async (req, res) => {
           message: message
         });
       }
+      */
     }
 
     res.json({ processed: invoices.length });
@@ -130,11 +136,13 @@ router.post('/process-notification-queue', async (req, res) => {
 
     for (const job of queue) {
       try {
+        /* Notifications disabled for now
         if (job.type === 'email') {
           await sendEmail(job.payload);
         } else if (job.type === 'sms') {
           await sendSms(job.payload);
         }
+        */
 
         // Success
         await supabase.from('notification_queue').update({

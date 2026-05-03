@@ -14,8 +14,8 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 // ── Replace these with your actual values ────────────────────────────────────
 // GitHub Actions injects these from Secrets at deploy time.
 // For local testing, update them directly here.
-export const SUPABASE_URL  = 'https://qpbeacuomvwjyyudehag.supabase.co';
-export const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwYmVhY3VvbXZ3anl5dWRlaGFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NTk4OTksImV4cCI6MjA5MzIzNTg5OX0.WP2PAJtgeUTPeU_SMKuZxRwiWwKlo_CAQ90n_Tik3aM';
+export const SUPABASE_URL = 'https://gfsdculcoictevjgqfen.supabase.co';
+export const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdmc2RjdWxjb2ljdGV2amdxZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4MTIwNzEsImV4cCI6MjA5MzM4ODA3MX0.DN1mieRAPKVCNaRkP2Y96XejL7zy4hZUw2teKQDRwaE';
 
 /**
  * Your home server URL — where the backend (SendGrid + MSG91) runs.
@@ -30,8 +30,8 @@ export const API_BASE = 'https://YOUR_HOME_SERVER_URL';
 // ── Supabase Client ───────────────────────────────────────────────────────────
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: {
-    persistSession:     true,
-    autoRefreshToken:   true,
+    persistSession: true,
+    autoRefreshToken: true,
     detectSessionInUrl: true,
   }
 });
@@ -41,7 +41,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
 // with a health check on every notification attempt.
 let _healthCache = { ok: null, checkedAt: 0 };
 const HEALTH_TTL_MS = 30_000; // 30 seconds
-const TIMEOUT_MS    =  4_000; // 4 second timeout for health + API calls
+const TIMEOUT_MS = 4_000; // 4 second timeout for health + API calls
 
 /**
  * Check if the home server backend is reachable.
@@ -108,12 +108,12 @@ export async function callBackend(path, body = {}) {
     const token = session?.access_token;
 
     const res = await fetch(`${API_BASE}${path}`, {
-      method:  'POST',
+      method: 'POST',
       headers: {
-        'Content-Type':  'application/json',
+        'Content-Type': 'application/json',
         ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       },
-      body:   JSON.stringify(body),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
 
