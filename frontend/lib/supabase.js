@@ -14,8 +14,8 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 // ── Replace these with your actual values ────────────────────────────────────
 // GitHub Actions injects these from Secrets at deploy time.
 // For local testing, update them directly here.
-export const SUPABASE_URL  = 'https://YOUR_PROJECT_ID.supabase.co';
-export const SUPABASE_ANON = 'YOUR_ANON_KEY';
+export const SUPABASE_URL  = 'https://qpbeacuomvwjyyudehag.supabase.co';
+export const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwYmVhY3VvbXZ3anl5dWRlaGFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NTk4OTksImV4cCI6MjA5MzIzNTg5OX0.WP2PAJtgeUTPeU_SMKuZxRwiWwKlo_CAQ90n_Tik3aM';
 
 /**
  * Your home server URL — where the backend (SendGrid + MSG91) runs.
