@@ -14,6 +14,11 @@
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- jsPDF & AutoTable for PDF exports -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+  <!-- SheetJS for Excel exports -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -22,9 +27,12 @@
 
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <div class="sidebar-logo-icon">S</div>
-        <span class="sidebar-title">SocietyPro</span>
+      <div class="sidebar-header" style="flex-direction:column; align-items:flex-start;">
+        <div style="display:flex; align-items:center; gap:var(--spacing-3);">
+          <div class="sidebar-logo-icon">S</div>
+          <span class="sidebar-title">SocietyPro</span>
+        </div>
+        <div id="sidebar-society-name" style="color:var(--text-secondary); font-size:0.8rem; margin-top:0.25rem;"></div>
       </div>
 
       <nav class="sidebar-nav">
@@ -136,6 +144,14 @@
       // Show admin nav only for secretary
       const adminNav = document.getElementById('nav-admin');
       if (adminNav) adminNav.style.display = role === 'secretary' ? 'flex' : 'none';
+
+      // Fetch society name from settings
+      supabase.from('settings').select('value').eq('key', 'society_name').single()
+        .then(({data}) => {
+          if(data && data.value) {
+            document.getElementById('sidebar-society-name').textContent = data.value;
+          }
+        });
 
       initRouter();
     }

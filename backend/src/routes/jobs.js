@@ -1,144 +1,174 @@
 /**
- * Jobs Routes — /api/jobs/*
- * Called by Supabase pg_cron via pg_net HTTP requests.
- * Secured by INTERNAL_TOKEN only (no user JWT for cron).
+ * Scheduled Jobs (Cron Webhooks)
+ * backend/src/routes/jobs.js
+ *
+ * Triggered by pg_cron (or external cron) with x-internal-token.
  */
-const router       = require('express').Router();
+const router = require('express').Router();
 const internalAuth = require('../middleware/internalAuth');
-const supabase     = require('../config/supabase-admin');
-const { sendEmail, overdueReminderHtml } = require('../services/emailService');
-const { sendSms }  = require('../services/smsService');
+const supabase = require('../config/supabase-admin');
+const { sendSms } = require('../services/smsService');
+const { sendEmail } = require('../services/emailService');
+
+// Apply internal auth to all job routes
+router.use(internalAuth);
 
 /**
- * POST /api/jobs/run-penalties
- * Calls the Postgres function apply_late_penalties()
- * Scheduled: daily at midnight via pg_cron
+ * Send pre-due date reminders (5 days before)
+ * POST /api/jobs/send-predue-reminders
  */
-router.post('/run-penalties', internalAuth, async (req, res) => {
+router.post('/send-predue-reminders', async (req, res) => {
   try {
-    const { error } = await supabase.rpc('apply_late_penalties');
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + 5);
+    const targetDateStr = targetDate.toISOString().split('T')[0];
+
+    const { data: invoices, error } = await supabase
+      .from('invoices')
+      .select('*, members(users(name, email, phone)), units(unit_number)')
+      .eq('status', 'Pending')
+      .eq('due_date', targetDateStr);
+
     if (error) throw error;
-    console.log('[JOB] Penalties applied:', new Date().toISOString());
-    res.json({ ok: true, job: 'apply_late_penalties' });
+    if (!invoices?.length) return res.json({ message: 'No pre-due reminders needed' });
+
+    for (const inv of invoices) {
+      const user = inv.members?.users;
+      if (!user) continue;
+
+      const message = `Reminder: Invoice ${inv.invoice_number} for Unit ${inv.units.unit_number} (Rs ${inv.total_amount}) is due on ${targetDateStr}. Please pay to avoid penalties.`;
+
+      // Enqueue Email
+      if (user.email) {
+        await enqueueNotification('email', {
+          to: user.email,
+          subject: 'Upcoming Invoice Due - SocietyPro',
+          text: message
+        });
+      }
+      
+      // Enqueue SMS
+      if (user.phone) {
+        await enqueueNotification('sms', {
+          phone: user.phone,
+          message: message
+        });
+      }
+    }
+
+    res.json({ processed: invoices.length });
   } catch (err) {
-    console.error('[JOB] Penalty error:', err.message);
+    console.error('[JOB] pre-due reminders error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 /**
+ * Send overdue reminders (daily)
  * POST /api/jobs/send-overdue-reminders
- * Fetches overdue invoices → sends email + SMS to each resident
- * Scheduled: daily at 9 AM via pg_cron
  */
-router.post('/send-overdue-reminders', internalAuth, async (req, res) => {
+router.post('/send-overdue-reminders', async (req, res) => {
   try {
-    const { data: overdueInvoices, error } = await supabase
+    const { data: invoices, error } = await supabase
       .from('invoices')
-      .select(`
-        id, invoice_number, amount, total_amount, due_date,
-        units ( unit_number ),
-        members ( name, email, phone )
-      `)
+      .select('*, members(users(name, email, phone)), units(unit_number)')
       .eq('status', 'Overdue');
 
     if (error) throw error;
+    if (!invoices?.length) return res.json({ message: 'No overdue invoices' });
 
-    let emailsSent = 0;
-    let smsSent    = 0;
+    for (const inv of invoices) {
+      const user = inv.members?.users;
+      if (!user) continue;
 
-    for (const inv of overdueInvoices || []) {
-      const name   = inv.members?.name        || 'Resident';
-      const email  = inv.members?.email;
-      const phone  = inv.members?.phone;
-      const unit   = inv.units?.unit_number   || '—';
-      const amount = parseFloat(inv.total_amount || 0);
+      const message = `URGENT: Invoice ${inv.invoice_number} for Unit ${inv.units.unit_number} is Overdue. Total amount including penalty: Rs ${inv.total_amount}. Please pay immediately.`;
 
-      if (email) {
-        try {
-          await sendEmail({
-            to:      email,
-            subject: `⚠️ Overdue Invoice ${inv.invoice_number} — SocietyPro`,
-            html:    overdueReminderHtml({
-              invoiceNumber: inv.invoice_number,
-              unitNumber:    unit,
-              residentName:  name,
-              amount,
-              dueDate:       inv.due_date,
-            })
-          });
-          emailsSent++;
-        } catch (e) { console.error('[JOB] Email failed:', e.message); }
+      // Enqueue Email
+      if (user.email) {
+        await enqueueNotification('email', {
+          to: user.email,
+          subject: 'OVERDUE: Invoice Payment Required - SocietyPro',
+          text: message
+        });
       }
-
-      if (phone) {
-        try {
-          await sendSms({
-            phone,
-            message: `Overdue: Invoice ${inv.invoice_number} ₹${amount.toLocaleString('en-IN')} was due ${new Date(inv.due_date).toLocaleDateString('en-IN')}. Pay now at SocietyPro.`
-          });
-          smsSent++;
-        } catch (e) { console.error('[JOB] SMS failed:', e.message); }
+      
+      // Enqueue SMS
+      if (user.phone) {
+        await enqueueNotification('sms', {
+          phone: user.phone,
+          message: message
+        });
       }
     }
 
-    console.log(`[JOB] Overdue reminders: ${emailsSent} emails, ${smsSent} SMS`);
-    res.json({ ok: true, total: overdueInvoices?.length || 0, emailsSent, smsSent });
+    res.json({ processed: invoices.length });
   } catch (err) {
-    console.error('[JOB] Overdue reminder error:', err.message);
+    console.error('[JOB] overdue reminders error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 /**
- * POST /api/jobs/send-amc-alerts
- * Finds assets expiring in 60 days → emails committee
- * Scheduled: every Monday 8 AM via pg_cron
+ * Process the notification queue
+ * POST /api/jobs/process-notification-queue
  */
-router.post('/send-amc-alerts', internalAuth, async (req, res) => {
+router.post('/process-notification-queue', async (req, res) => {
   try {
-    const { data: assets } = await supabase
-      .from('assets')
+    // Get up to 50 pending notifications ready to retry
+    const { data: queue, error } = await supabase
+      .from('notification_queue')
       .select('*')
-      .lte('amc_expiry', new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0])
-      .order('amc_expiry');
+      .eq('status', 'pending')
+      .lte('next_retry', new Date().toISOString())
+      .limit(50);
 
-    if (!assets?.length) return res.json({ ok: true, sent: 0 });
+    if (error) throw error;
+    if (!queue?.length) return res.json({ message: 'Queue empty' });
 
-    // Get secretary emails
-    const { data: secretaries } = await supabase
-      .from('users')
-      .select('email,name')
-      .in('role', ['secretary','manager'])
-      .eq('is_active', true)
-      .not('email', 'is', null);
+    let sent = 0;
+    let failed = 0;
 
-    const rows = assets.map(a =>
-      `<tr><td style="padding:.4rem .75rem">${a.name}</td><td style="padding:.4rem .75rem">${a.location||'—'}</td><td style="padding:.4rem .75rem">${a.amc_vendor||'—'}</td><td style="padding:.4rem .75rem;color:#b91c1c">${a.amc_expiry}</td></tr>`
-    ).join('');
+    for (const job of queue) {
+      try {
+        if (job.type === 'email') {
+          await sendEmail(job.payload);
+        } else if (job.type === 'sms') {
+          await sendSms(job.payload);
+        }
 
-    for (const s of secretaries || []) {
-      await sendEmail({
-        to:      s.email,
-        subject: `⚠️ ${assets.length} Asset(s) AMC Expiring Soon — SocietyPro`,
-        html:    `<div style="font-family:sans-serif;padding:24px;max-width:600px;margin:auto;">
-          <h2>⚠️ AMC Expiry Alert</h2>
-          <p>The following society assets have AMC expiring within 60 days:</p>
-          <table style="width:100%;border-collapse:collapse;">
-            <thead style="background:#f5f3ef;"><tr><th style="padding:.4rem .75rem;text-align:left">Asset</th><th style="padding:.4rem .75rem;text-align:left">Location</th><th style="padding:.4rem .75rem;text-align:left">Vendor</th><th style="padding:.4rem .75rem;text-align:left">Expiry</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-          <p style="margin-top:1.5rem;">Please arrange renewal before expiry.</p>
-        </div>`
-      });
+        // Success
+        await supabase.from('notification_queue').update({
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+          attempts: job.attempts + 1
+        }).eq('id', job.id);
+        sent++;
+      } catch (sendErr) {
+        // Failure handling (exponential backoff)
+        const attempts = job.attempts + 1;
+        const isMax = attempts >= job.max_attempts;
+        const nextRetry = new Date(Date.now() + Math.pow(2, attempts) * 60000); // 2^n minutes
+
+        await supabase.from('notification_queue').update({
+          status: isMax ? 'failed' : 'pending',
+          error: sendErr.message,
+          attempts: attempts,
+          next_retry: nextRetry.toISOString()
+        }).eq('id', job.id);
+        failed++;
+      }
     }
 
-    console.log(`[JOB] AMC alerts: ${assets.length} assets, notified ${secretaries?.length} secretaries`);
-    res.json({ ok: true, assets: assets.length, notified: secretaries?.length || 0 });
+    res.json({ processed: queue.length, sent, failed });
   } catch (err) {
-    console.error('[JOB] AMC alert error:', err.message);
+    console.error('[JOB] process queue error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
+
+// Helper function to enqueue
+async function enqueueNotification(type, payload) {
+  await supabase.from('notification_queue').insert({ type, payload });
+}
 
 module.exports = router;

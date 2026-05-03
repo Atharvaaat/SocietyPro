@@ -3,53 +3,79 @@
 --  Migration 004
 --
 --  Prerequisites:
---    1. Enable pg_cron in Supabase Dashboard:
---       Database → Extensions → pg_cron → Enable
---    2. Enable pg_net for HTTP calls:
---       Database → Extensions → pg_net → Enable
+--    1. Enable pg_cron in Supabase Dashboard → Database → Extensions
+--    2. Enable pg_net in Supabase Dashboard → Database → Extensions
 --
---  INTERNAL_TOKEN must match what is set in your
---  Render backend environment variables.
+--  Replace YOUR_BACKEND_URL and YOUR_INTERNAL_TOKEN with actual values.
 -- ============================================================
 
--- ── 1. Apply late payment penalties — runs midnight daily ──
+-- ── 1. Apply progressive late penalties — daily at midnight ──
 SELECT cron.schedule(
   'societypro-apply-penalties',
   '0 0 * * *',
-  $$
-    SELECT apply_late_penalties();
-  $$
+  $$ SELECT apply_late_penalties(); $$
 );
 
--- ── 2. Send overdue reminders via backend — runs 9 AM daily ─
---    Backend endpoint: POST /api/jobs/send-overdue-reminders
---    Secured by X-Internal-Token header
+-- ── 2. Auto-generate recurring invoices — 1st of every month at 6 AM ──
 SELECT cron.schedule(
-  'societypro-overdue-reminders',
+  'societypro-generate-recurring',
+  '0 6 1 * *',
+  $$ SELECT generate_recurring_invoices(); $$
+);
+
+-- ── 3. Send pre-due-date reminders (5 days before) — daily at 9 AM ──
+SELECT cron.schedule(
+  'societypro-predue-reminders',
   '0 9 * * *',
   $$
     SELECT net.http_post(
-      url     := 'https://YOUR_BACKEND.onrender.com/api/jobs/send-overdue-reminders',
+      url     := 'https://YOUR_BACKEND_URL/api/jobs/send-predue-reminders',
       headers := '{"Content-Type":"application/json","x-internal-token":"YOUR_INTERNAL_TOKEN"}'::jsonb,
       body    := '{}'::jsonb
     );
   $$
 );
 
--- ── 3. AMC expiry alerts — runs 8 AM every Monday ─────────
+-- ── 4. Send overdue reminders — daily at 9:30 AM ──
+SELECT cron.schedule(
+  'societypro-overdue-reminders',
+  '30 9 * * *',
+  $$
+    SELECT net.http_post(
+      url     := 'https://YOUR_BACKEND_URL/api/jobs/send-overdue-reminders',
+      headers := '{"Content-Type":"application/json","x-internal-token":"YOUR_INTERNAL_TOKEN"}'::jsonb,
+      body    := '{}'::jsonb
+    );
+  $$
+);
+
+-- ── 5. Process notification queue — every 5 minutes ──
+SELECT cron.schedule(
+  'societypro-process-notif-queue',
+  '*/5 * * * *',
+  $$
+    SELECT net.http_post(
+      url     := 'https://YOUR_BACKEND_URL/api/jobs/process-notification-queue',
+      headers := '{"Content-Type":"application/json","x-internal-token":"YOUR_INTERNAL_TOKEN"}'::jsonb,
+      body    := '{}'::jsonb
+    );
+  $$
+);
+
+-- ── 6. AMC expiry alerts — every Monday at 8 AM ──
 SELECT cron.schedule(
   'societypro-amc-alerts',
   '0 8 * * 1',
   $$
     SELECT net.http_post(
-      url     := 'https://YOUR_BACKEND.onrender.com/api/jobs/send-amc-alerts',
+      url     := 'https://YOUR_BACKEND_URL/api/jobs/send-amc-alerts',
       headers := '{"Content-Type":"application/json","x-internal-token":"YOUR_INTERNAL_TOKEN"}'::jsonb,
       body    := '{}'::jsonb
     );
   $$
 );
 
--- ── 4. Auto-update asset expiry status — runs daily at 1 AM ─
+-- ── 7. Auto-update asset expiry status — daily at 1 AM ──
 SELECT cron.schedule(
   'societypro-asset-status',
   '0 1 * * *',
@@ -63,8 +89,3 @@ SELECT cron.schedule(
       AND status IN ('OK','Expiring Soon');
   $$
 );
-
--- ── To view scheduled jobs ────────────────────────────────
--- SELECT * FROM cron.job;
--- ── To unschedule ─────────────────────────────────────────
--- SELECT cron.unschedule('societypro-apply-penalties');
