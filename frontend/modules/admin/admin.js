@@ -109,33 +109,19 @@ async function renderUsers(container) {
 
   document.getElementById('btn-add-user')?.addEventListener('click',()=>{
     openModal('Add New User', `
-      <form id="add-user-form">
-        <div class="form-group"><label class="form-label">Name *</label><input name="name" class="form-control" required placeholder="John Doe"></div>
-        <div class="form-group"><label class="form-label">Email *</label><input name="email" type="email" class="form-control" required placeholder="john@example.com"></div>
-        <div class="form-group"><label class="form-label">Phone</label><input name="phone" class="form-control" placeholder="9876543210"></div>
-        <div class="form-group"><label class="form-label">Role</label>
-          <select name="role" class="form-control">
-            <option value="resident">Resident</option>
-            <option value="secretary">Secretary</option>
-          </select>
-        </div>
-        <div class="form-group"><label class="form-label">Temporary Password *</label><input name="password" type="password" class="form-control" required placeholder="At least 6 characters"></div>
-      </form>`, 
-      [{ label:'Create User', class:'btn btn-primary', action: async()=>{
-        const fd=new FormData(document.getElementById('add-user-form'));
-        const obj=Object.fromEntries(fd);
-        
-        // Call backend API to create user via Admin Auth
-        const result = await callBackend('/api/admin/create-user', obj);
-        if(!result.ok) {
-          showToast(result.error || result.reason || 'Failed to create user', 'error');
-          return false;
-        }
-
-        showToast('User created successfully!', 'success');
-        closeModal();
-        renderUsers(document.getElementById('admin-content'));
-      }}]
+      <div style="text-align: center; padding: 1rem;">
+        <i class="fa-solid fa-server fa-3x" style="color: var(--text-muted); margin-bottom: 1rem;"></i>
+        <h3 style="margin-bottom: 0.5rem;">Backend Server Disabled</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+          To add a new user, please do it manually via your Supabase Dashboard:
+        </p>
+        <ol style="text-align: left; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.5rem;">
+          <li>Go to <strong>Authentication &rarr; Users</strong> and add the user.</li>
+          <li>Copy their new <strong>User UID</strong>.</li>
+          <li>Go to <strong>Table Editor &rarr; users</strong> and insert a new row with their UID and details.</li>
+        </ol>
+      </div>`, 
+      [{ label:'Got it', class:'btn btn-primary', action: closeModal }]
     );
   });
 }
