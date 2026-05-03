@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+backend/node_modules/
+
+# Environment files — NEVER commit these
+.env
+.env.local
+.env.production
+backend/.env
+backend/.env.local
+backend/.env.production
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build outputs (if added later)
+dist/
+build/
+.next/
+
+# Uploads (legacy — now on Supabase Storage)
+uploads/
+
+# Supabase local dev
+.supabase/
+
+# IDE
+.idea/
+.vscode/settings.json
+
+# Legacy upload directories (files now on Supabase Storage)
+uploads/

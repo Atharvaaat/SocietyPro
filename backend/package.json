@@ -1,0 +1,23 @@
+{
+  "name": "societypro-backend",
+  "version": "1.0.0",
+  "description": "SocietyPro thin backend — email (SendGrid), SMS (MSG91), cron jobs",
+  "main": "src/app.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node src/app.js",
+    "dev":   "nodemon src/app.js"
+  },
+  "dependencies": {
+    "@sendgrid/mail":       "^8.1.0",
+    "@supabase/supabase-js": "^2.43.0",
+    "axios":                 "^1.6.8",
+    "cors":                  "^2.8.5",
+    "dotenv":                "^16.4.5",
+    "express":               "^4.18.3",
+    "jsonwebtoken":          "^9.0.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}

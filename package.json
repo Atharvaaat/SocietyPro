@@ -1,0 +1,11 @@
+{
+  "name": "societypro",
+  "version": "2.0.0",
+  "description": "SocietyPro — GitHub Pages + Supabase architecture",
+  "scripts": {
+    "backend":      "cd backend && npm start",
+    "backend:dev":  "cd backend && npm run dev",
+    "backend:install": "cd backend && npm install"
+  },
+  "keywords": ["society", "management", "supabase", "github-pages"]
+}

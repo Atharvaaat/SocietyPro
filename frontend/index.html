@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SocietyPro — Premium Society Management</title>
+  <meta name="description" content="Complete residential society management system — Supabase powered">
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <!-- ── App Container (hidden until authenticated) ── -->
+  <div id="app-container" style="display:none;">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo-icon">S</div>
+        <span class="sidebar-title">SocietyPro</span>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="#/dashboard"     class="nav-item" data-route="/dashboard"><i class="fa-solid fa-chart-pie"></i> Dashboard</a>
+        <a href="#/units"         class="nav-item" data-route="/units"><i class="fa-solid fa-building"></i> Units &amp; Residents</a>
+        <a href="#/billing"       class="nav-item" data-route="/billing"><i class="fa-solid fa-file-invoice-dollar"></i> Billing &amp; Finance</a>
+        <a href="#/helpdesk"      class="nav-item" data-route="/helpdesk"><i class="fa-solid fa-headset"></i> Helpdesk</a>
+        <a href="#/communication" class="nav-item" data-route="/communication"><i class="fa-solid fa-bullhorn"></i> Communication</a>
+        <a href="#/facilities"    class="nav-item" data-route="/facilities"><i class="fa-solid fa-dumbbell"></i> Facilities</a>
+        <a href="#/security"      class="nav-item" data-route="/security"><i class="fa-solid fa-shield-halved"></i> Security</a>
+        <a href="#/admin"         class="nav-item" data-route="/admin" id="nav-admin" style="display:none;">
+          <i class="fa-solid fa-gear"></i> Admin Settings
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-profile-sm">
+          <div class="user-avatar" id="sidebar-user-avatar">U</div>
+          <div class="user-info-sm">
+            <h4 id="sidebar-user-name">User</h4>
+            <p id="sidebar-user-role">Role</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Wrapper -->
+    <main class="main-wrapper">
+
+      <!-- Topbar -->
+      <header class="topbar">
+        <div class="page-title" id="topbar-title">
+          <button id="mobile-menu-btn" class="icon-btn" style="display:none;">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          Dashboard
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-btn" title="SOS Emergency" id="btn-sos-trigger">
+            <i class="fa-solid fa-triangle-exclamation" style="color:var(--status-danger);"></i>
+          </button>
+          <button class="icon-btn" title="Logout" id="btn-logout">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Dynamic Content Area -->
+      <div class="content-area" id="main-content"></div>
+    </main>
+  </div>
+
+  <!-- ── Login Container ── -->
+  <div id="login-container" class="login-wrapper animate-fade-in" style="display:none;">
+    <div class="card login-card">
+      <div class="login-logo">S</div>
+      <h1 class="sidebar-title" style="font-size:2rem;margin-bottom:.5rem;">SocietyPro</h1>
+      <p style="color:var(--text-secondary);margin-bottom:2rem;">Premium Society Management</p>
+
+      <form id="login-form">
+        <div class="form-group text-left" style="text-align:left;">
+          <label class="form-label">Email Address</label>
+          <input type="email" id="login-email" class="form-control" placeholder="admin@societypro.in" required>
+        </div>
+        <div class="form-group text-left" style="text-align:left;margin-bottom:1.5rem;">
+          <label class="form-label">Password</label>
+          <input type="password" id="login-password" class="form-control" placeholder="••••••••" required>
+        </div>
+        <div id="login-error" style="color:var(--status-danger);margin-bottom:1rem;font-size:.875rem;min-height:1rem;"></div>
+        <button type="submit" class="btn btn-primary w-full" id="login-submit-btn" style="padding:.75rem;font-size:1rem;">
+          Sign In <i class="fa-solid fa-arrow-right ml-2"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Global Modal -->
+  <div class="modal-overlay" id="global-modal-overlay">
+    <div class="modal" id="global-modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-title">Modal</h3>
+        <button class="modal-close" id="modal-close-btn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer" id="modal-footer"></div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- ── Application Bootstrap (ES Module) ── -->
+  <script type="module">
+    import { initAuth, logout, currentUser, currentRole, renderLoginForm } from './modules/auth/auth.js';
+    import { initRouter, navigate } from './router.js';
+    import { initModal, showToast } from './lib/ui.js';
+
+    initModal();
+
+    function showApp(user, role) {
+      document.getElementById('login-container').style.display = 'none';
+      document.getElementById('app-container').style.display   = 'flex';
+
+      // Update sidebar profile
+      document.getElementById('sidebar-user-name').textContent = user.name || user.email;
+      document.getElementById('sidebar-user-role').textContent = role;
+      document.getElementById('sidebar-user-avatar').textContent = (user.name || user.email)[0].toUpperCase();
+
+      // Show admin nav only for secretary
+      const adminNav = document.getElementById('nav-admin');
+      if (adminNav) adminNav.style.display = role === 'secretary' ? 'flex' : 'none';
+
+      initRouter();
+    }
+
+    function showLogin() {
+      document.getElementById('app-container').style.display   = 'none';
+      document.getElementById('login-container').style.display = 'flex';
+      renderLoginForm();
+    }
+
+    // Bootstrap auth
+    initAuth(showApp, showLogin);
+
+    // Logout button
+    document.getElementById('btn-logout')?.addEventListener('click', async () => {
+      await logout();
+      showToast('Logged out', 'info');
+    });
+
+    // SOS shortcut from topbar
+    document.getElementById('btn-sos-trigger')?.addEventListener('click', () => {
+      navigate('/security');
+    });
+
+    // Mobile sidebar toggle
+    document.getElementById('mobile-menu-btn')?.addEventListener('click', () => {
+      document.getElementById('sidebar').classList.toggle('open');
+    });
+  </script>
+
+</body>
+</html>
