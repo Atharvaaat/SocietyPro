@@ -18,14 +18,14 @@ export const SUPABASE_URL = 'https://gfsdculcoictevjgqfen.supabase.co';
 export const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdmc2RjdWxjb2ljdGV2amdxZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4MTIwNzEsImV4cCI6MjA5MzM4ODA3MX0.DN1mieRAPKVCNaRkP2Y96XejL7zy4hZUw2teKQDRwaE';
 
 /**
- * Your home server URL — where the backend (SendGrid + MSG91) runs.
- * Must be HTTPS if served from GitHub Pages (mixed-content restriction).
- * Options:
- *   - ngrok / Cloudflare Tunnel: https://xxxx.ngrok.io
- *   - Dynamic DNS + Let's Encrypt: https://home.yourdomain.com
- *   - Local testing only: http://localhost:3001 (won't work on GitHub Pages)
+ * Your home server URL — where the backend runs.
+ * Loaded DYNAMICALLY from Supabase `settings` table (key: 'api_base_url').
+ * This means you can update the Cloudflare Tunnel URL from the admin panel
+ * or Supabase dashboard WITHOUT pushing code.
+ *
+ * Fallback: 'https://YOUR_HOME_SERVER_URL' (will fail health check gracefully)
  */
-export const API_BASE = 'https://YOUR_HOME_SERVER_URL';
+export let API_BASE = 'https://YOUR_HOME_SERVER_URL';
 
 // ── Supabase Client ───────────────────────────────────────────────────────────
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
@@ -35,6 +35,22 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
     detectSessionInUrl: true,
   }
 });
+
+// ── Load API_BASE from settings at startup ───────────────────────────────────
+// Admin updates this in Supabase: settings.key='api_base_url', settings.value='https://xxx.trycloudflare.com'
+(async function loadApiBase() {
+  try {
+    const { data } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'api_base_url')
+      .single();
+    if (data?.value) {
+      API_BASE = data.value.replace(/\/+$/, ''); // trim trailing slash
+      console.info('[Config] API_BASE loaded:', API_BASE);
+    }
+  } catch { /* settings table may not exist yet — use fallback */ }
+})();
 
 // ── Backend Health Check with caching ────────────────────────────────────────
 // We cache the result for 30 seconds to avoid hammering the home server
