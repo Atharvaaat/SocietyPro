@@ -429,7 +429,7 @@ async function editRecurringModal(id) {
    ========================================================================== */
 async function renderInvoices(container) {
   let query = supabase.from('invoices')
-    .select('*, units(unit_number), members(name)')
+    .select('*, units(unit_number), members(user_id, users(name))')
     .order('created_at', { ascending: false });
   
   if (!hasRole('secretary')) {
@@ -446,7 +446,7 @@ async function renderInvoices(container) {
     </div>
     <div class="card" style="overflow:hidden;">
       <table class="data-table" id="invoices-table">
-        <thead><tr><th>Invoice #</th><th>Unit</th><th>Type</th><th>Total</th><th>Due Date</th><th>Status</th></tr></thead>
+        <thead><tr><th>Invoice #</th><th>Unit</th><th>Type</th><th>Total</th><th>Due Date</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>${invoices?.map(inv => {
           const sc = { Paid:'success', Overdue:'danger', Pending:'warning', 'Pending Verification':'info', Cancelled:'secondary' }[inv.status] || '';
           return `<tr>
@@ -456,15 +456,144 @@ async function renderInvoices(container) {
             <td>₹${parseFloat(inv.total_amount).toLocaleString('en-IN')}</td>
             <td>${new Date(inv.due_date).toLocaleDateString('en-IN')}</td>
             <td><span class="badge badge-${sc}">${inv.status}</span></td>
+            <td>
+              <button class="btn btn-sm btn-outline" onclick="window._printInvoice('${inv.id}')"><i class="fa-solid fa-print"></i> Print</button>
+            </td>
           </tr>`;
-        }).join('') || '<tr><td colspan="6" style="text-align:center">No invoices found.</td></tr>'}</tbody>
+        }).join('') || '<tr><td colspan="7" style="text-align:center">No invoices found.</td></tr>'}</tbody>
       </table>
     </div>
   `;
 
   document.getElementById('btn-export-pdf')?.addEventListener('click', exportInvoicesPDF);
   document.getElementById('btn-export-excel')?.addEventListener('click', exportInvoicesExcel);
+
+  window._printInvoice = (id) => openInvoicePrintView(id);
 }
+
+async function openInvoicePrintView(id) {
+  const { data: inv } = await supabase.from('invoices')
+    .select('*, units(unit_number), members(user_id, users(name, email, phone))')
+    .eq('id', id).single();
+  
+  if (!inv) return showToast('Invoice not found', 'error');
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <html>
+    <head>
+      <title>Invoice ${inv.invoice_number}</title>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+      <style>
+        body { font-family: 'Inter', sans-serif; background: #fff; color: #222; margin: 0; padding: 40px; box-sizing: border-box; }
+        .invoice-container { max-width: 800px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 60px; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
+        .header .inv-num { font-size: 16px; color: #666; font-weight: 600; }
+        .title-sec { margin-bottom: 40px; }
+        .title-sec h2 { font-size: 48px; font-weight: 800; margin: 0; letter-spacing: -1px; text-transform: uppercase; }
+        .title-sec p { margin: 5px 0 0; color: #666; font-size: 14px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 50px; }
+        .box h4 { font-size: 12px; text-transform: uppercase; color: #888; letter-spacing: 1px; margin: 0 0 10px; }
+        .box p { margin: 0 0 5px; font-size: 15px; font-weight: 500; }
+        .box .light { color: #666; font-weight: 400; font-size: 14px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+        th { text-align: left; padding: 15px; font-size: 12px; text-transform: uppercase; color: #666; border-bottom: 2px solid #eee; }
+        td { padding: 20px 15px; border-bottom: 1px solid #f0f0f0; font-size: 15px; }
+        .total-sec { display: flex; justify-content: flex-end; margin-bottom: 60px; }
+        .total-box { width: 300px; }
+        .total-row { display: flex; justify-content: space-between; padding: 10px 15px; font-size: 15px; }
+        .total-row.final { font-size: 20px; font-weight: 800; border-top: 2px solid #222; padding-top: 15px; margin-top: 5px; }
+        .footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid #eee; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+        .footer h4 { font-size: 12px; text-transform: uppercase; color: #888; margin: 0 0 10px; }
+        .footer p { margin: 0; font-size: 13px; color: #666; line-height: 1.5; }
+        .graphic { position: fixed; bottom: -50px; left: -50px; width: 100%; height: 200px; background: radial-gradient(circle at bottom left, #f3f4f6, transparent); z-index: -1; }
+        @media print { body { padding: 0; } .graphic { display: none; } }
+      </style>
+    </head>
+    <body>
+      <div class="invoice-container">
+        <div class="header">
+          <h1>SOCIETYPRO</h1>
+          <div class="inv-num">NO. ${inv.invoice_number}</div>
+        </div>
+        
+        <div class="title-sec">
+          <h2>Invoice</h2>
+          <p>Date: ${new Date(inv.created_at).toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'})}</p>
+        </div>
+
+        <div class="grid">
+          <div class="box">
+            <h4>Billed To</h4>
+            <p>${inv.members?.users?.name || 'Resident'}</p>
+            <p class="light">Unit: ${inv.units?.unit_number || 'N/A'}</p>
+            <p class="light">${inv.members?.users?.email || ''}</p>
+            <p class="light">${inv.members?.users?.phone || ''}</p>
+          </div>
+          <div class="box">
+            <h4>From</h4>
+            <p>Society Management Commitee</p>
+            <p class="light">SocietyPro Automated Billing</p>
+            <p class="light">admin@societypro.in</p>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th style="text-align:right;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div style="font-weight:600;margin-bottom:4px;">${inv.invoice_type}</div>
+                <div style="color:#666;font-size:13px;">${inv.notes || 'Monthly billing'}</div>
+              </td>
+              <td style="text-align:right;">₹${parseFloat(inv.amount).toLocaleString('en-IN')}</td>
+            </tr>
+            ${inv.penalty > 0 ? `
+            <tr>
+              <td>
+                <div style="font-weight:600;margin-bottom:4px;">Late Payment Penalty</div>
+                <div style="color:#666;font-size:13px;">Applied on overdue amount</div>
+              </td>
+              <td style="text-align:right;">₹${parseFloat(inv.penalty).toLocaleString('en-IN')}</td>
+            </tr>` : ''}
+          </tbody>
+        </table>
+
+        <div class="total-sec">
+          <div class="total-box">
+            <div class="total-row"><span>Subtotal</span> <span>₹${parseFloat(inv.amount).toLocaleString('en-IN')}</span></div>
+            ${inv.penalty > 0 ? `<div class="total-row"><span>Penalty</span> <span>₹${parseFloat(inv.penalty).toLocaleString('en-IN')}</span></div>` : ''}
+            <div class="total-row final"><span>Total Due</span> <span>₹${parseFloat(inv.total_amount).toLocaleString('en-IN')}</span></div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <div>
+            <h4>Payment Info</h4>
+            <p>Please pay offline or via standard society UPI transfer and update the status in the SocietyPro portal.</p>
+          </div>
+          <div>
+            <h4>Terms & Conditions</h4>
+            <p>Payment is due by ${new Date(inv.due_date).toLocaleDateString('en-US')}. Late fees may be applied if not paid by the due date. Status: <strong>${inv.status}</strong>.</p>
+          </div>
+        </div>
+      </div>
+      <div class="graphic"></div>
+      <script>
+        window.onload = () => { setTimeout(() => { window.print(); window.close(); }, 500); }
+      </script>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+}
+
 
 function exportInvoicesPDF() {
   if (!window.jspdf) return showToast('PDF library loading, please wait', 'warning');
