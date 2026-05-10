@@ -1,11 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700&display=swap');
 
 :root {
-  /* Core Colors */
+  /* Core Colors (Dark) */
   --bg-main: #0f0f12;
   --bg-panel: rgba(255, 255, 255, 0.03);
   --bg-panel-hover: rgba(255, 255, 255, 0.05);
   --bg-panel-border: rgba(255, 255, 255, 0.08);
+  --bg-sidebar: rgba(15, 15, 18, 0.8);
   
   /* Accents - Amber/Gold */
   --accent-primary: #e4a853;
@@ -27,6 +28,36 @@
   --text-primary: #f3f4f6;
   --text-secondary: #9ca3af;
   --text-muted: #6b7280;
+}
+
+/* Light Theme Variables */
+:root[data-theme="light"] {
+  --bg-main: #f9fafb;
+  --bg-panel: #ffffff;
+  --bg-panel-hover: #f3f4f6;
+  --bg-panel-border: #e5e7eb;
+  --bg-sidebar: rgba(255, 255, 255, 0.9);
+  
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #6b7280;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg-main: #f9fafb;
+    --bg-panel: #ffffff;
+    --bg-panel-hover: #f3f4f6;
+    --bg-panel-border: #e5e7eb;
+    --bg-sidebar: rgba(255, 255, 255, 0.9);
+    
+    --text-primary: #111827;
+    --text-secondary: #4b5563;
+    --text-muted: #6b7280;
+  }
+}
+
+:root {
 
   /* Typography */
   --font-sans: 'Inter', sans-serif;
@@ -123,7 +154,7 @@ input, select, textarea {
 /* Sidebar */
 .sidebar {
   width: 260px;
-  background: rgba(15, 15, 18, 0.8);
+  background: var(--bg-sidebar);
   border-right: var(--border-width) solid var(--bg-panel-border);
   display: flex;
   flex-direction: column;

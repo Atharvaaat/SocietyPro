@@ -77,6 +77,9 @@
           <div class="page-title" id="topbar-title">Dashboard</div>
         </div>
         <div class="topbar-actions">
+          <button class="icon-btn" title="Toggle Theme" id="btn-theme-toggle">
+            <i class="fa-solid fa-moon"></i>
+          </button>
           <button class="icon-btn" title="SOS Emergency" id="btn-sos-trigger">
             <i class="fa-solid fa-triangle-exclamation" style="color:var(--status-danger);"></i>
           </button>
@@ -88,6 +91,11 @@
 
       <!-- Dynamic Content Area -->
       <div class="content-area" id="main-content"></div>
+
+      <!-- Footer -->
+      <footer style="text-align: center; padding: 1rem; color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid var(--bg-panel-border);">
+        SocietyPro © 2026 By Atharvaaat
+      </footer>
     </main>
   </div>
 
@@ -222,7 +230,43 @@
         icon.classList.replace('fa-eye-slash', 'fa-eye');
       }
     });
-  </script>
+    // Theme Toggle Logic
+    const themeBtn = document.getElementById('btn-theme-toggle');
+    const themeIcon = themeBtn?.querySelector('i');
+    
+    // Check local storage for saved theme
+    const savedTheme = localStorage.getItem('societypro_theme');
+    if (savedTheme) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+      updateThemeIcon(savedTheme);
+    } else {
+      // Check system default
+      const isLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+      updateThemeIcon(isLight ? 'light' : 'dark');
+    }
 
+    function updateThemeIcon(theme) {
+      if (!themeIcon) return;
+      if (theme === 'light') {
+        themeIcon.className = 'fa-solid fa-sun';
+      } else {
+        themeIcon.className = 'fa-solid fa-moon';
+      }
+    }
+
+    themeBtn?.addEventListener('click', () => {
+      let currentTheme = document.documentElement.getAttribute('data-theme');
+      
+      if (!currentTheme) {
+        currentTheme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      }
+
+      const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', newTheme);
+      localStorage.setItem('societypro_theme', newTheme);
+      updateThemeIcon(newTheme);
+    });
+
+  </script>
 </body>
 </html>
