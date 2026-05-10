@@ -70,11 +70,11 @@
 
       <!-- Topbar -->
       <header class="topbar">
-        <div class="page-title" id="topbar-title">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
           <button id="mobile-menu-btn" class="icon-btn mobile-menu-btn">
             <i class="fa-solid fa-bars"></i>
           </button>
-          Dashboard
+          <div class="page-title" id="topbar-title">Dashboard</div>
         </div>
         <div class="topbar-actions">
           <button class="icon-btn" title="SOS Emergency" id="btn-sos-trigger">
@@ -198,6 +198,16 @@
     document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
       document.getElementById('sidebar').classList.remove('open');
       document.getElementById('sidebar-overlay').classList.remove('active');
+    });
+
+    // Auto-close sidebar on mobile after clicking a nav link
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        if (window.innerWidth <= 1024) {
+          document.getElementById('sidebar').classList.remove('open');
+          document.getElementById('sidebar-overlay').classList.remove('active');
+        }
+      });
     });
 
     // Password visibility toggle
