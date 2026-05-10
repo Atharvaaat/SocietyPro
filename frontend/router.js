@@ -16,6 +16,7 @@ const routes = {
   '/facilities':    () => import('./modules/facilities/facilities.js'),
   '/security':      () => import('./modules/security/security.js'),
   '/admin':         () => import('./modules/admin/admin.js'),
+  '/notifications': () => import('./modules/notifications/notifications.js'),
 };
 
 /** Navigate to a hash route */
@@ -34,8 +35,8 @@ async function _handleRoute() {
   const path  = hash.replace('#', '') || '/dashboard';
   const route = routes[path] || routes['/dashboard'];
 
-  // Guard: /admin only for secretary
-  if (path === '/admin' && !hasRole('secretary')) {
+  // Guard: /admin and /notifications only for secretary
+  if ((path === '/admin' || path === '/notifications') && !hasRole('secretary')) {
     navigate('/dashboard');
     return;
   }
@@ -55,6 +56,7 @@ async function _handleRoute() {
     '/facilities':    'Facilities',
     '/security':      'Security',
     '/admin':         'Admin Settings',
+    '/notifications': 'Notifications',
   };
   const titleEl = document.getElementById('topbar-title');
   if (titleEl) titleEl.textContent = titles[path] || 'SocietyPro';

@@ -188,7 +188,44 @@ async function renderExpenses(container) {
 
   window._editExpense = (id) => editExpenseModal(id);
   window._editRecurring = (id) => editRecurringModal(id);
-  window._approveExpense = async (id) => { await supabase.from('expenses').update({status:'Approved',approved_by:currentUser.id,updated_at:new Date().toISOString()}).eq('id',id); showToast('Approved','success'); loadTab('expenses'); };
+  window._approveExpense = async (id) => {
+    // 1. Approve the expense
+    await supabase.from('expenses').update({status:'Approved',approved_by:currentUser.id,updated_at:new Date().toISOString()}).eq('id',id);
+    // 2. Get expense details + splits to generate invoices
+    const {data:exp} = await supabase.from('expenses').select('*, expense_splits(*, units(id, unit_number), members:units(members(id, user_id)))').eq('id',id).single();
+    if (exp?.expense_splits?.length) {
+      for (const split of exp.expense_splits) {
+        const unitId = split.unit_id;
+        const memberId = split.members?.members?.[0]?.id;
+        const invNum = 'INV-' + Date.now().toString().slice(-8);
+        await supabase.from('invoices').insert({
+          invoice_number: invNum, unit_id: unitId, member_id: memberId || null,
+          invoice_type: exp.name, billing_month: new Date().toISOString().slice(0,10),
+          amount: parseFloat(split.amount), due_date: exp.due_date || new Date(Date.now()+10*86400000).toISOString().slice(0,10),
+          status: 'Pending', notes: exp.description
+        });
+        // Queue notification
+        const userId = split.members?.members?.[0]?.user_id;
+        if (userId) {
+          await supabase.from('notifications').insert({
+            user_id: userId, type:'expense', title:`New Expense: ${exp.name}`,
+            message:`₹${split.amount} due for ${exp.name}. Please pay and mark as paid.`,
+            channel:'telegram', status:'pending', metadata:{expense_id:id}
+          });
+        }
+      }
+    } else if (exp?.split_type === 'none') {
+      // No splits — create one invoice for the expense raiser
+      const invNum = 'INV-' + Date.now().toString().slice(-8);
+      await supabase.from('invoices').insert({
+        invoice_number: invNum, invoice_type: exp.name,
+        billing_month: new Date().toISOString().slice(0,10),
+        amount: parseFloat(exp.amount), due_date: exp.due_date || new Date(Date.now()+10*86400000).toISOString().slice(0,10),
+        status: 'Pending', notes: exp.description
+      });
+    }
+    showToast('Approved & invoices generated','success'); loadTab('expenses');
+  };
   window._rejectExpense = async (id) => { await supabase.from('expenses').update({status:'Rejected',updated_at:new Date().toISOString()}).eq('id',id); showToast('Rejected','info'); loadTab('expenses'); };
   window._viewSplits = async (id) => {
     const { data } = await supabase.from('expense_splits').select('*, units(unit_number)').eq('expense_id', id);

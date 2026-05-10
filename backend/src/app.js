@@ -19,6 +19,7 @@ app.use(express.json({ limit: '50kb' }));
 
 // Routes
 app.use('/api/notify', require('./routes/notify'));
+app.use('/api/notify', require('./routes/telegram'));
 app.use('/api/jobs',   require('./routes/jobs'));
 app.use('/api/admin',  require('./routes/admin'));
 
