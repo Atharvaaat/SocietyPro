@@ -124,38 +124,34 @@ async function renderPayments(container) {
    2. EXPENSES TAB (Custom + Recurring)
    ========================================================================== */
 async function renderExpenses(container) {
-  // Fetch custom expenses
-  const { data: customExpenses } = await supabase.from('expenses')
-    .select('*, users!expenses_raised_by_fkey(name)')
-    .eq('expense_type', 'custom')
-    .order('created_at', { ascending: false });
+  // Fetch custom expenses — users see only their own, admin sees all
+  let expQ = supabase.from('expenses').select('*, users!expenses_raised_by_fkey(name)').eq('expense_type', 'custom').order('created_at', { ascending: false });
+  if (!hasRole('secretary')) expQ = expQ.eq('raised_by', currentUser.id);
+  const { data: customExpenses } = await expQ;
 
-  // Fetch recurring templates (secretary only)
-  let recurringHtml = '';
-  if (hasRole('secretary')) {
-    const { data: recurringExpenses } = await supabase.from('recurring_expenses')
-      .select('*')
-      .order('created_at', { ascending: false });
+  // Fetch recurring templates — visible to all users (common expenses)
+  const { data: recurringExpenses } = await supabase.from('recurring_expenses').select('*').order('created_at', { ascending: false });
 
-    recurringHtml = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin: 2rem 0 1rem 0;">
-        <h3>Recurring Expenses (Templates)</h3>
-        <button class="btn btn-primary" id="btn-add-recurring"><i class="fa-solid fa-plus"></i> Add Recurring</button>
-      </div>
-      <div class="card" style="overflow:hidden;margin-bottom: 2rem;">
-        <table class="data-table">
-          <thead><tr><th>Name</th><th>Description</th><th>Amount/Unit</th><th>Frequency</th><th>Status</th></tr></thead>
-          <tbody>${recurringExpenses?.map(r => `<tr>
-            <td><strong>${r.name}</strong></td>
-            <td>${r.description || '—'}</td>
-            <td>₹${parseFloat(r.amount).toLocaleString('en-IN')}</td>
-            <td><span class="badge badge-info">${r.frequency}</span></td>
-            <td><span class="badge badge-${r.is_active?'success':'secondary'}">${r.is_active?'Active':'Paused'}</span></td>
-          </tr>`).join('') || '<tr><td colspan="5" style="text-align:center">No recurring templates setup.</td></tr>'}</tbody>
-        </table>
-      </div>
-    `;
-  }
+  const recurringHtml = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin: 2rem 0 1rem 0;">
+      <h3>Recurring Expenses</h3>
+      ${hasRole('secretary') ? `<button class="btn btn-primary" id="btn-add-recurring"><i class="fa-solid fa-plus"></i> Add Recurring</button>` : ''}
+    </div>
+    <div class="card" style="overflow:hidden;margin-bottom: 2rem;">
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>Amount/Unit</th><th>Frequency</th><th>Due Days</th><th>Penalty %</th><th>Notify</th><th>Status</th>${hasRole('secretary')?'<th>Actions</th>':''}</tr></thead>
+        <tbody>${recurringExpenses?.map(r => `<tr>
+          <td><strong>${r.name}</strong><br><small style="color:var(--text-muted)">${r.description||''}</small></td>
+          <td>₹${parseFloat(r.amount).toLocaleString('en-IN')}</td>
+          <td><span class="badge badge-info">${r.frequency}</span></td>
+          <td>${r.due_days||10} days</td>
+          <td>${r.penalty_percent||5}%</td>
+          <td><small>Day ${r.notify_day||1}, ${r.notify_time||'12:00'}</small></td>
+          <td><span class="badge badge-${r.is_active?'success':'secondary'}">${r.is_active?'Active':'Paused'}</span></td>
+          ${hasRole('secretary')?`<td><button class="icon-btn" onclick="window._editRecurring('${r.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button></td>`:''}
+        </tr>`).join('') || `<tr><td colspan="${hasRole('secretary')?8:7}" style="text-align:center">No recurring expenses.</td></tr>`}</tbody>
+      </table>
+    </div>`;
 
   container.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom: 1rem;">
@@ -164,9 +160,10 @@ async function renderExpenses(container) {
     </div>
     <div class="card" style="overflow:hidden;">
       <table class="data-table">
-        <thead><tr><th>Date Raised</th><th>Name</th><th>Raised By</th><th>Amount</th><th>Due Date</th><th>Split</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Date</th><th>Name</th><th>Raised By</th><th>Amount</th><th>Due Date</th><th>Split</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>${customExpenses?.map(e => {
           const sc = { Paid:'success', Approved:'info', Pending:'warning', Rejected:'danger' }[e.status] || '';
+          const canEdit = (e.raised_by===currentUser.id && e.status==='Pending') || hasRole('secretary');
           return `<tr>
             <td>${new Date(e.created_at).toLocaleDateString('en-IN')}</td>
             <td><strong>${e.name}</strong><br><small style="color:var(--text-muted)">${e.category||'General'}</small></td>
@@ -175,47 +172,27 @@ async function renderExpenses(container) {
             <td>${e.due_date ? new Date(e.due_date).toLocaleDateString('en-IN') : '—'}</td>
             <td><span class="badge badge-neutral">${e.split_type}</span></td>
             <td><span class="badge badge-${sc}">${e.status}</span></td>
-            <td>
-              ${e.status === 'Pending' && hasRole('secretary') ? `
-                <button class="btn btn-sm btn-primary" onclick="window._approveExpense('${e.id}')">Approve</button>
-                <button class="btn btn-sm btn-danger" onclick="window._rejectExpense('${e.id}')">Reject</button>
-              ` : ''}
-              ${e.split_type !== 'none' ? `<button class="btn btn-sm btn-outline" onclick="window._viewSplits('${e.id}')">View Splits</button>` : ''}
+            <td style="white-space:nowrap;">
+              ${canEdit ? `<button class="icon-btn" onclick="window._editExpense('${e.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>` : ''}
+              ${e.status === 'Pending' && hasRole('secretary') ? `<button class="btn btn-sm btn-primary" onclick="window._approveExpense('${e.id}')">Approve</button> <button class="btn btn-sm btn-danger" onclick="window._rejectExpense('${e.id}')">Reject</button>` : ''}
+              ${e.split_type !== 'none' ? `<button class="btn btn-sm btn-outline" onclick="window._viewSplits('${e.id}')">Splits</button>` : ''}
             </td>
           </tr>`;
-        }).join('') || '<tr><td colspan="8" style="text-align:center">No custom expenses raised.</td></tr>'}</tbody>
+        }).join('') || '<tr><td colspan="8" style="text-align:center">No custom expenses.</td></tr>'}</tbody>
       </table>
     </div>
-    ${recurringHtml}
-  `;
+    ${recurringHtml}`;
 
   document.getElementById('btn-add-custom-expense')?.addEventListener('click', addCustomExpenseModal);
-  if (hasRole('secretary')) {
-    document.getElementById('btn-add-recurring')?.addEventListener('click', addRecurringExpenseModal);
-  }
+  if (hasRole('secretary')) document.getElementById('btn-add-recurring')?.addEventListener('click', addRecurringExpenseModal);
 
-  window._approveExpense = async (id) => {
-    const { error } = await supabase.from('expenses').update({ status: 'Approved', approved_by: currentUser.id, updated_at: new Date().toISOString() }).eq('id', id);
-    if (!error) { showToast('Expense approved', 'success'); loadTab('expenses'); }
-  };
-  window._rejectExpense = async (id) => {
-    const { error } = await supabase.from('expenses').update({ status: 'Rejected', updated_at: new Date().toISOString() }).eq('id', id);
-    if (!error) { showToast('Expense rejected', 'info'); loadTab('expenses'); }
-  };
+  window._editExpense = (id) => editExpenseModal(id);
+  window._editRecurring = (id) => editRecurringModal(id);
+  window._approveExpense = async (id) => { await supabase.from('expenses').update({status:'Approved',approved_by:currentUser.id,updated_at:new Date().toISOString()}).eq('id',id); showToast('Approved','success'); loadTab('expenses'); };
+  window._rejectExpense = async (id) => { await supabase.from('expenses').update({status:'Rejected',updated_at:new Date().toISOString()}).eq('id',id); showToast('Rejected','info'); loadTab('expenses'); };
   window._viewSplits = async (id) => {
     const { data } = await supabase.from('expense_splits').select('*, units(unit_number)').eq('expense_id', id);
-    openModal('Expense Splits', `
-      <table class="data-table">
-        <thead><tr><th>Unit</th><th>Amount</th><th>Status</th></tr></thead>
-        <tbody>
-          ${data?.map(s => `<tr>
-            <td>Unit ${s.units?.unit_number}</td>
-            <td>₹${parseFloat(s.amount).toLocaleString('en-IN')}</td>
-            <td><span class="badge badge-${s.status==='Paid'?'success':'warning'}">${s.status}</span></td>
-          </tr>`).join('') || '<tr><td colspan="3">No splits generated yet.</td></tr>'}
-        </tbody>
-      </table>
-    `, []);
+    openModal('Expense Splits', `<table class="data-table"><thead><tr><th>Unit</th><th>Amount</th><th>Status</th></tr></thead><tbody>${data?.map(s=>`<tr><td>Unit ${s.units?.unit_number}</td><td>₹${parseFloat(s.amount).toLocaleString('en-IN')}</td><td><span class="badge badge-${s.status==='Paid'?'success':'warning'}">${s.status}</span></td></tr>`).join('')||'<tr><td colspan="3">No splits.</td></tr>'}</tbody></table>`, []);
   };
 }
 
@@ -310,37 +287,93 @@ async function addCustomExpenseModal() {
 }
 
 async function addRecurringExpenseModal() {
-  openModal('Add Recurring Expense Template', `
+  openModal('Add Recurring Expense', `
     <form id="recurring-form">
-      <div class="form-group"><label class="form-label">Template Name *</label><input name="name" class="form-control" required placeholder="e.g. Monthly Maintenance"></div>
+      <div class="form-group"><label class="form-label">Name *</label><input name="name" class="form-control" required placeholder="e.g. Monthly Maintenance"></div>
       <div class="form-group"><label class="form-label">Description</label><textarea name="description" class="form-control" rows="2"></textarea></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
         <div class="form-group"><label class="form-label">Amount per Unit (₹) *</label><input name="amount" type="number" class="form-control" required></div>
         <div class="form-group"><label class="form-label">Frequency *</label>
-          <select name="frequency" class="form-control">
-            <option value="monthly">Monthly</option>
-            <option value="quarterly">Quarterly</option>
-            <option value="yearly">Yearly</option>
-          </select>
+          <select name="frequency" class="form-control"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option></select>
         </div>
       </div>
-      <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.5rem;">
-        <i class="fa-solid fa-info-circle"></i> This will automatically generate invoices for all occupied units at the specified frequency.
-      </p>
+      <hr style="border-color:var(--bg-panel-border);margin:1rem 0;">
+      <h4 style="margin-bottom:.75rem;">Notification & Penalty Settings</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="form-group"><label class="form-label">Notify on Day</label><input name="notify_day" type="number" min="1" max="28" value="1" class="form-control"></div>
+        <div class="form-group"><label class="form-label">Notify at Time</label><input name="notify_time" type="time" value="12:00" class="form-control"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="form-group"><label class="form-label">Due Days (grace period)</label><input name="due_days" type="number" min="1" value="10" class="form-control"></div>
+        <div class="form-group"><label class="form-label">Penalty %</label><input name="penalty_percent" type="number" step="0.5" min="0" value="5" class="form-control"></div>
+      </div>
+      <p style="font-size:.8rem;color:var(--text-muted);"><i class="fa-solid fa-info-circle"></i> Invoices auto-generated for all occupied units. Unpaid months roll over.</p>
     </form>`,
-    [{ label:'Create Template', class:'btn btn-primary', action: async()=>{
+    [{ label:'Create', class:'btn btn-primary', action: async()=>{
       const fd = new FormData(document.getElementById('recurring-form'));
-      const obj = {
-        name: fd.get('name'),
-        description: fd.get('description'),
-        amount: parseFloat(fd.get('amount')),
-        frequency: fd.get('frequency'),
-        created_by: currentUser.id
-      };
+      const obj = { name:fd.get('name'), description:fd.get('description'), amount:parseFloat(fd.get('amount')), frequency:fd.get('frequency'), notify_day:parseInt(fd.get('notify_day'))||1, notify_time:fd.get('notify_time')||'12:00', due_days:parseInt(fd.get('due_days'))||10, penalty_percent:parseFloat(fd.get('penalty_percent'))||5, created_by:currentUser.id };
       const { error } = await supabase.from('recurring_expenses').insert(obj);
       if(error) { showToast(error.message, 'error'); return false; }
-      showToast('Recurring template created!', 'success');
-      closeModal(); loadTab('expenses');
+      showToast('Recurring expense created!', 'success'); closeModal(); loadTab('expenses');
+    }}]
+  );
+}
+
+async function editExpenseModal(id) {
+  const {data:e} = await supabase.from('expenses').select('*').eq('id',id).single();
+  if(!e) return showToast('Not found','error');
+  openModal('Edit Expense', `
+    <form id="edit-expense-form">
+      <div class="form-group"><label class="form-label">Name</label><input name="name" class="form-control" value="${e.name}"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="form-group"><label class="form-label">Category</label><input name="category" class="form-control" value="${e.category||''}"></div>
+        <div class="form-group"><label class="form-label">Amount (₹)</label><input name="amount" type="number" class="form-control" value="${e.amount}"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Description</label><textarea name="description" class="form-control" rows="2">${e.description||''}</textarea></div>
+      <div class="form-group"><label class="form-label">Due Date</label><input name="due_date" type="date" class="form-control" value="${e.due_date||''}"></div>
+    </form>`,
+    [{label:'Save',class:'btn btn-primary',action:async()=>{
+      const fd=new FormData(document.getElementById('edit-expense-form'));
+      const upd={name:fd.get('name'),category:fd.get('category'),amount:parseFloat(fd.get('amount')),description:fd.get('description'),due_date:fd.get('due_date')||null,updated_at:new Date().toISOString()};
+      const {error}=await supabase.from('expenses').update(upd).eq('id',id);
+      if(error){showToast(error.message,'error');return false;}
+      showToast('Expense updated','success'); closeModal(); loadTab('expenses');
+    }}]
+  );
+}
+
+async function editRecurringModal(id) {
+  const {data:r} = await supabase.from('recurring_expenses').select('*').eq('id',id).single();
+  if(!r) return showToast('Not found','error');
+  openModal('Edit Recurring Expense', `
+    <form id="edit-recurring-form">
+      <div class="form-group"><label class="form-label">Name</label><input name="name" class="form-control" value="${r.name}"></div>
+      <div class="form-group"><label class="form-label">Description</label><textarea name="description" class="form-control" rows="2">${r.description||''}</textarea></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="form-group"><label class="form-label">Amount (₹)</label><input name="amount" type="number" class="form-control" value="${r.amount}"></div>
+        <div class="form-group"><label class="form-label">Frequency</label>
+          <select name="frequency" class="form-control">${['monthly','quarterly','yearly'].map(f=>`<option ${f===r.frequency?'selected':''}>${f}</option>`).join('')}</select>
+        </div>
+      </div>
+      <hr style="border-color:var(--bg-panel-border);margin:1rem 0;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="form-group"><label class="form-label">Notify Day</label><input name="notify_day" type="number" min="1" max="28" class="form-control" value="${r.notify_day||1}"></div>
+        <div class="form-group"><label class="form-label">Notify Time</label><input name="notify_time" type="time" class="form-control" value="${r.notify_time||'12:00'}"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="form-group"><label class="form-label">Due Days</label><input name="due_days" type="number" min="1" class="form-control" value="${r.due_days||10}"></div>
+        <div class="form-group"><label class="form-label">Penalty %</label><input name="penalty_percent" type="number" step="0.5" class="form-control" value="${r.penalty_percent||5}"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Active</label>
+        <select name="is_active" class="form-control"><option value="true" ${r.is_active?'selected':''}>Active</option><option value="false" ${!r.is_active?'selected':''}>Paused</option></select>
+      </div>
+    </form>`,
+    [{label:'Save',class:'btn btn-primary',action:async()=>{
+      const fd=new FormData(document.getElementById('edit-recurring-form'));
+      const upd={name:fd.get('name'),description:fd.get('description'),amount:parseFloat(fd.get('amount')),frequency:fd.get('frequency'),notify_day:parseInt(fd.get('notify_day'))||1,notify_time:fd.get('notify_time')||'12:00',due_days:parseInt(fd.get('due_days'))||10,penalty_percent:parseFloat(fd.get('penalty_percent'))||5,is_active:fd.get('is_active')==='true',updated_at:new Date().toISOString()};
+      const {error}=await supabase.from('recurring_expenses').update(upd).eq('id',id);
+      if(error){showToast(error.message,'error');return false;}
+      showToast('Updated','success'); closeModal(); loadTab('expenses');
     }}]
   );
 }
