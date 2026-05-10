@@ -6,7 +6,7 @@
  */
 const jwt = require('jsonwebtoken');
 
-module.exports = function internalAuth(req, res, next) {
+module.exports = async function internalAuth(req, res, next) {
   // 1. Cron/internal token auth
   const internalToken = req.headers['x-internal-token'];
   if (internalToken && internalToken === process.env.INTERNAL_TOKEN) {
@@ -19,14 +19,18 @@ module.exports = function internalAuth(req, res, next) {
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
     try {
-      const decoded = jwt.verify(token, process.env.SUPABASE_JWT_SECRET, {
-        algorithms: ['HS256']
-      });
-      req.user    = decoded;
+      const supabase = require('../config/supabase-admin');
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      
+      if (error || !user) {
+        return res.status(401).json({ error: 'Invalid token', detail: error?.message });
+      }
+      
+      req.user = user;
       req.authType = 'jwt';
       return next();
     } catch (err) {
-      return res.status(401).json({ error: 'Invalid token', detail: err.message });
+      return res.status(401).json({ error: 'Token verification failed', detail: err.message });
     }
   }
 
