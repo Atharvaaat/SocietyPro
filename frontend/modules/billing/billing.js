@@ -43,7 +43,7 @@ async function loadTab(tab) {
 async function renderPayments(container) {
   // Fetch pending dues for the user (or all if secretary)
   let pendingQuery = supabase.from('invoices')
-    .select('*, units(unit_number), members(user_id, name)')
+    .select('*, units(unit_number), members(user_id, users(name))')
     .in('status', ['Pending', 'Overdue', 'Pending Verification'])
     .order('due_date', { ascending: true });
 
@@ -56,7 +56,7 @@ async function renderPayments(container) {
 
   // Fetch payment history
   let historyQuery = supabase.from('payments')
-    .select('*, units(unit_number), members(user_id, name), invoices(invoice_number)')
+    .select('*, units(unit_number), members(user_id, users(name)), invoices(invoice_number)')
     .order('created_at', { ascending: false }).limit(20);
 
   if (!hasRole('secretary')) {
@@ -216,13 +216,22 @@ async function renderExpenses(container) {
       }
     } else if (exp?.split_type === 'none') {
       // No splits — create one invoice for the expense raiser
+      const { data: raiserMember } = await supabase.from('members').select('id, unit_id, user_id').eq('user_id', exp.raised_by).eq('is_active', true).limit(1).single();
       const invNum = 'INV-' + Date.now().toString().slice(-8);
       await supabase.from('invoices').insert({
-        invoice_number: invNum, invoice_type: exp.name,
+        invoice_number: invNum, unit_id: raiserMember?.unit_id || null, member_id: raiserMember?.id || null,
+        invoice_type: exp.name,
         billing_month: new Date().toISOString().slice(0,10),
         amount: parseFloat(exp.amount), due_date: exp.due_date || new Date(Date.now()+10*86400000).toISOString().slice(0,10),
         status: 'Pending', notes: exp.description
       });
+      if (raiserMember?.user_id) {
+          await supabase.from('notifications').insert({
+            user_id: raiserMember.user_id, type:'expense', title:`New Expense Approved: ${exp.name}`,
+            message:`₹${exp.amount} due for ${exp.name}. Please pay and mark as paid.`,
+            channel:'telegram', status:'pending', metadata:{expense_id:id}
+          });
+      }
     }
     showToast('Approved & invoices generated','success'); loadTab('expenses');
   };
