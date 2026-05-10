@@ -46,6 +46,9 @@
         <a href="#/admin"         class="nav-item" data-route="/admin" id="nav-admin" style="display:none;">
           <i class="fa-solid fa-gear"></i> Admin Settings
         </a>
+        <a href="#/notifications" class="nav-item" data-route="/notifications" id="nav-notifications" style="display:none;">
+          <i class="fa-solid fa-bell"></i> Notifications
+        </a>
       </nav>
 
       <div class="sidebar-footer">
@@ -59,13 +62,16 @@
       </div>
     </aside>
 
+    <!-- Sidebar Overlay (mobile) -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
     <!-- Main Wrapper -->
     <main class="main-wrapper">
 
       <!-- Topbar -->
       <header class="topbar">
         <div class="page-title" id="topbar-title">
-          <button id="mobile-menu-btn" class="icon-btn" style="display:none;">
+          <button id="mobile-menu-btn" class="icon-btn mobile-menu-btn">
             <i class="fa-solid fa-bars"></i>
           </button>
           Dashboard
@@ -99,7 +105,12 @@
         </div>
         <div class="form-group text-left" style="text-align:left;margin-bottom:1.5rem;">
           <label class="form-label">Password</label>
-          <input type="password" id="login-password" class="form-control" placeholder="••••••••" required>
+          <div class="password-wrapper">
+            <input type="password" id="login-password" class="form-control" placeholder="••••••••" required>
+            <button type="button" class="password-toggle" id="password-toggle" tabindex="-1">
+              <i class="fa-solid fa-eye"></i>
+            </button>
+          </div>
         </div>
         <div id="login-error" style="color:var(--status-danger);margin-bottom:1rem;font-size:.875rem;min-height:1rem;"></div>
         <button type="submit" class="btn btn-primary w-full" id="login-submit-btn" style="padding:.75rem;font-size:1rem;">
@@ -145,6 +156,8 @@
       // Show admin nav only for secretary
       const adminNav = document.getElementById('nav-admin');
       if (adminNav) adminNav.style.display = role === 'secretary' ? 'flex' : 'none';
+      const notifNav = document.getElementById('nav-notifications');
+      if (notifNav) notifNav.style.display = role === 'secretary' ? 'flex' : 'none';
 
       // Fetch society name from settings
       supabase.from('settings').select('value').eq('key', 'society_name').single()
@@ -180,6 +193,24 @@
     // Mobile sidebar toggle
     document.getElementById('mobile-menu-btn')?.addEventListener('click', () => {
       document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebar-overlay').classList.toggle('active');
+    });
+    document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebar-overlay').classList.remove('active');
+    });
+
+    // Password visibility toggle
+    document.getElementById('password-toggle')?.addEventListener('click', () => {
+      const pwdInput = document.getElementById('login-password');
+      const icon = document.querySelector('#password-toggle i');
+      if (pwdInput.type === 'password') {
+        pwdInput.type = 'text';
+        icon.classList.replace('fa-eye', 'fa-eye-slash');
+      } else {
+        pwdInput.type = 'password';
+        icon.classList.replace('fa-eye-slash', 'fa-eye');
+      }
     });
   </script>
 
